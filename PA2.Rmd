@@ -1,0 +1,44 @@
+---
+title: "Reproducible Research: Peer Assessment 2"
+output: 
+  html_document:
+    keep_md: true
+---
+## Loading libraries
+Loading libraries that will be used later. The rubric specifically says to show all code, so echo will be left on.Tempting to use suppressPackageStartupMessages(expr)
+```{r }
+require(data.table)
+require(lubridate)
+require(dplyr)
+require(ggplot2)
+```
+
+## Loading the data
+```{r }
+
+fname<-"repdata-data-StormData.csv.bz2"
+if (!file.exists(fname)){
+        message(paste("Cannot find",fname,"in local directory, download it using the commented out command (which works in R, but not in markdown)."))
+#       download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2",fname,"curl")
+        
+        
+} else {
+        message(paste("Found ",fname,"in local directory, reusing it..."))
+}
+```
+
+The source file was in reality downloaded on Tue Aug 18 2015.
+
+Reading in the source file takes forever, instead lets read in something I prepared earlier...
+```{r cache=TRUE}
+
+load("data.no.remarks.RData")
+
+```
+
+```{r}
+clean_data<-x %>% mutate(year=year(mdy_hms(BGN_DATE))) %>%
+        select(year,STATE,EVTYPE,FATALITIES:CROPDMGEXP)
+str(clean_data)
+```
+
