@@ -19,7 +19,7 @@ require(dplyr)
 require(ggplot2)
 ```
 
-## Loading the data
+### Loading the data
 Data was sourced from a copy of the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database that had been stored on the Reproducible Research web site. The following code will download it and store it locally unless a previously downloaded copy is found, in which case this is used instead.
 
 The data is described in great detail in the National Weather Service Storm Data Documentation (10-1605 7thAug2007). A copy is available from https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf.
@@ -44,10 +44,11 @@ Reading in the source file takes a while, so the read is cached.
 
 # load("data.no.remarks.RData")
 ptm <- proc.time()
-  df<-read.csv("repdata_data_StormData.csv.bz2",stringsAsFactors=FALSE)
+  df<-read.csv("repdata_data_StormData.csv.bz2",stringsAsFactors=TRUE)
 proc.time() - ptm
 
 ```
+### Tidying the data
 A lot of the columns in the data are not required for this investigation. 
 
 The year of the record is derived from the BGN_DATE field. 
@@ -68,14 +69,14 @@ clean_data<-df %>% mutate(year=year(mdy_hms(BGN_DATE))) %>%
         select(year,STATE,EVTYPE,FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP, CROPDMGEXP, REFNUM)
 str(clean_data)
 ```
-The National Weather Service recognises 48 different Event Names, however there are 955 levels in the EVTYPE factor. These need to be mapped 
+There are 955 levels in the EVTYPE factor.
+The National Weather Service recognises 48 different Event Names
 
 ```{r}
-# Code to create a dataframe of official NOAA list of Events
-# Credit for the idea goes to Deas Richardson. This df is derived from cutting and pasting 
+# Official NOAA list of valid Events from 
 # table 2.1.1 on page 6 of the National Weather Service Storm Data Documentation 10-1605 7 Aug2007
 
-Valid_EVTYPES <- structure(list(EVTYPE = c("Astronomical Low Tide", "Avalanche", 
+valid_events <- c("Astronomical Low Tide", "Avalanche", 
 "Blizzard", "Coastal Flood", "Cold/Wind Chill", "Debris Flow", 
 "Dense Fog", "Dense Smoke", "Drought", "Dust Devil", "Dust Storm", 
 "Excessive Heat", "Extreme Cold/Wind Chill", "Flash Flood", "Flood", 
@@ -86,7 +87,48 @@ Valid_EVTYPES <- structure(list(EVTYPE = c("Astronomical Low Tide", "Avalanche",
 "Rip Current", "Seiche", "Sleet", "Storm Surge/Tide", "Strong Wind", 
 "Thunderstorm Wind", "Tornado", "Tropical Depression", "Tropical Storm", 
 "Tsunami", "Volcanic Ash", "Waterspout", "Wildfire", "Winter Storm", 
-"Winter Weather")), .Names = "EVTYPE", row.names = c(NA, -48L
-), class = "data.frame")
+"Winter Weather")
+valid_events_u <- toupper(valid_events)
 ```
-# Results
+So we add a new field, event, which should only hold a valid value or NA
+```{r}
+clean_data<-clean_data %>% mutate(event=ifelse(toupper(EVTYPE) %in% valid_events_u,toupper(EVTYPE),NA)) 
+```
+However, of a total `r nrow(clean_data)` rows of data, `r nrow(filter(clean_data,is.na(event)))` do not fit. The top missing categories are:
+
+```{r}
+count(subset(clean_data,is.na(event)),EVTYPE,sort=TRUE)
+ 
+```
+Correcting some of the low hanging fruit as follows:
+```{r}
+target<-clean_data$EVTYPE %in% c("TSTM WIND", 
+                                 "THUNDERSTORM WINDS",
+                                 "TSTM WIND/HAIL")
+clean_data[target,]<- mutate(clean_data[target,],event="THUNDERSTORM WIND") 
+
+target<-clean_data$EVTYPE %in% c("MARINE TSTM WIND")
+clean_data[target,]<- mutate(clean_data[target,],event="MARINE THUNDERSTORM WIND") 
+
+target<-clean_data$EVTYPE %in% c("HIGH WINDS")
+clean_data[target,]<- mutate(clean_data[target,],event="HIGH WIND") 
+
+count(subset(clean_data,is.na(event)),EVTYPE,sort=TRUE)
+
+```
+While it would be possible to continue in this vain, the percentage of accurately classified events is now `r 100 - 100 * (nrow(filter(clean_data,is.na(event)))/ nrow(clean_data))` which should be good enough for our purposes. 
+
+### Preparing to look at population health impact
+
+We will exclude rows with no event, no fatalities and no injuries.
+```{r}
+health_data<-clean_data %>% filter((INJURIES>0 | FATALITIES >0) & !is.na(event))
+
+h<- summarise(group_by(health_data,event),Deaths=sum(FATALITIES),Injuries=sum(INJURIES))
+h<-arrange(h,desc(Deaths))
+qplot(Deaths,event, data=h)
+qplot(Injuries,event, data=h)
+
+```
+
+## Results
