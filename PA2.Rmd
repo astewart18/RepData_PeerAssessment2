@@ -13,7 +13,7 @@ Data from the NOAA Storm database was analysed to determine the types of weather
 ### Loading libraries
 Loading R libraries used as part of this analysis. 
 ```{r }
-require(data.table)
+require(reshape2)
 require(lubridate)
 require(dplyr)
 require(ggplot2)
@@ -130,5 +130,43 @@ qplot(Deaths,event, data=h)
 qplot(Injuries,event, data=h)
 
 ```
+### Preparing to look at economic damage
 
+We will exclude rows with no event, no crop damage and no property damage.
+```{r}
+finance_data<-clean_data %>% filter((PROPDMG>0 | CROPDMG >0) & !is.na(event))
+
+str(finance_data)
+```
+The documentation states that "Estimates (of damage) should be rounded to three significant digits, followed by an alphabetical character signifying the magnitude of the number, i.e., 1.55B for $1,550,000,000. Alphabetical characters used to signify magnitude include “K” for thousands, “M” for millions, and “B” for billions."
+
+However, there are some data issues. 
+```{r}
+count(finance_data,CROPDMGEXP)
+count(finance_data,PROPDMGEXP)
+
+nrow(filter(finance_data,CROPDMG > 0 & CROPDMGEXP==""))
+nrow(filter(finance_data,PROPDMG > 0 & PROPDMGEXP==""))
+
+```
+
+For the purposes of this analysis, values that are not a correct multiplier (K, M, B) or their lower case equivalent will be ignored. Blank is assumed to mean a multiplier of 1, although the previous query shows that this only will impact 71 records. 
+```{r}
+finance_data<-mutate(finance_data,
+        property.dollars=
+                ifelse(toupper(PROPDMGEXP)=="" ,1*PROPDMG,
+                ifelse(toupper(PROPDMGEXP)=="K",1000*PROPDMG,
+                ifelse(toupper(PROPDMGEXP)=="M",1000000*PROPDMG,
+                ifelse(toupper(PROPDMGEXP)=="B",1000000000*PROPDMG,
+                0)))), 
+        crop.dollars=
+                ifelse(toupper(CROPDMGEXP)=="" ,1*CROPDMG,
+                ifelse(toupper(CROPDMGEXP)=="K",1000*CROPDMG,
+                ifelse(toupper(CROPDMGEXP)=="M",1000000*CROPDMG,
+                ifelse(toupper(CROPDMGEXP)=="B",1000000000*CROPDMG,
+                0)))) 
+        ) %>% select(event,year,property.dollars,crop.dollars)
+finance_data<-melt(finance_data,id=c("year","event"),measured=c("property.dollars","crop.dollars"))
+names(finance_data)
+```
 ## Results
