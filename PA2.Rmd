@@ -130,6 +130,8 @@ qplot(Deaths,event, data=h)
 qplot(Injuries,event, data=h)
 
 ```
+```{r}
+```
 ### Preparing to look at economic damage
 
 We will exclude rows with no event, no crop damage and no property damage.
@@ -151,7 +153,7 @@ nrow(filter(finance_data,PROPDMG > 0 & PROPDMGEXP==""))
 ```
 
 For the purposes of this analysis, values that are not a correct multiplier (K, M, B) or their lower case equivalent will be ignored. Blank is assumed to mean a multiplier of 1, although the previous query shows that this only will impact 71 records. 
-```{r}
+```{r fig.height=15}
 finance_data<-mutate(finance_data,
         property.dollars=
                 ifelse(toupper(PROPDMGEXP)=="" ,1*PROPDMG,
@@ -165,8 +167,34 @@ finance_data<-mutate(finance_data,
                 ifelse(toupper(CROPDMGEXP)=="M",1000000*CROPDMG,
                 ifelse(toupper(CROPDMGEXP)=="B",1000000000*CROPDMG,
                 0)))) 
-        ) %>% select(event,year,property.dollars,crop.dollars)
-finance_data<-melt(finance_data,id=c("year","event"),measured=c("property.dollars","crop.dollars"))
-names(finance_data)
+        ) %>% select(event,property.dollars,crop.dollars) %>%
+              melt(id=c("event"),measured=c("property.dollars","crop.dollars")) %>%
+              group_by(event, variable)  %>%
+              summarise(dollars=sum(value)) 
+
+save(finance_data,file="finance_data.Rdata")
 ```
 ## Results
+```{r fig.height=10}
+
+#sort the data so that events causing highest property damage show first on the chart
+
+finance_data<-finance_data[order(finance_data$variable,finance_data$dollars),]
+finance_data$event<- factor(finance_data$event, as.character(finance_data$event))
+
+# None produce the plot
+ggplot(finance_data, aes(x=event,y=dollars,fill=variable)) +
+        geom_bar(stat="identity",position=position_dodge(), colour="black") +
+        coord_flip() + 
+        scale_fill_manual(name="Damage Type", 
+                          breaks=c("property.dollars", "crop.dollars"),
+                          labels=c("Property","Crop")) +
+        ylab("Damage in thousands of dollars") + 
+        xlab("Storm Event Category") +
+        scale_fill_brewer(palette="Set1") +
+        ggtitle("Storm Events recorded across USA \nFinancial Impact")
+
+
+```
+
+
